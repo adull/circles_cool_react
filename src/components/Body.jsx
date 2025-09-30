@@ -11,7 +11,7 @@ const Body = () => {
     
     return (
         <div className="container mx-auto pb-6" style={{ height }}>
-            <div className="border b-1 border-x-0 md:border-x-1 border-black h-[100%] w-full">
+            <div className="h-[100%] w-full">
                 <Paper /> 
             </div>
         </div>

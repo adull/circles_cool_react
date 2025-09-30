@@ -8,52 +8,114 @@ const Paper = () => {
     const [display, setDisplay] = useState({ width: 0, height: 0})
 
     useEffect(() => {
-        const element = parentRef.current
-        if (!element) return;
-      
-        const observer = new ResizeObserver((entries) => {
-          for (let entry of entries) {
-            initPaper()
-            const { width, height } = entry.contentRect;
-            setDisplay({ width, height })
+      const element = parentRef.current
+      if (!element) return;
+    
+      const observer = new ResizeObserver((entries) => {
+        for (let entry of entries) {
+          initPaper()
+          const { width, height } = entry.contentRect;
+          setDisplay({ width, height })
 
-            const canvas = document.getElementById('paper')
-            if(canvas) {
-                paper.view.viewSize = new paper.Size(width, height)
-                paper.view.update()
-            }
-            drawLine()
-            
+          const canvas = document.getElementById('paper')
+          if(canvas) {
+            paper.view.viewSize = new paper.Size(width, height)
+            paper.view.update()
           }
-        });
-      
-        observer.observe(element);
-      
-        return () => {
-          observer.unobserve(element);
-          observer.disconnect();
-        };
-      }, []);
+          setTimeout(drawPattern, 100)
 
-      const initPaper = () => {
-        paper.setup("paper")
+          paper.view.onFrame = (event) => {
+            animate(event);
+          };
+          
+        }
+      });
+
+    
+    
+    
+      observer.observe(element);
+    
+      return () => {
+        observer.unobserve(element);
+        observer.disconnect();
+      };
+    }, []);
+
+    const initPaper = () => {
+      paper.setup("paper")
+    }
+
+    const animate = (event) => {
+      const verticals = paper.project.getItems({ name: "vertical-segment" });
+      verticals.forEach((path) => {
+        path.rotate(5, path.position); // rotate 1° per frame around its center
+      });
+    }
+    
+
+    const drawPattern = () => {
+      console.log(`umm do this`)
+      const { view } = paper;
+      const bandHeight = 8;       // thickness of each stripe
+      const circleRadius = 60;    // controls "circle size"
+      const circleSpacing = 160;  // horizontal spacing of circles
+      const rows = 5;             // number of rows of circle centers
+    
+      // if (paper.project && paper.project.activeLayer) {
+      //   paper.project.activeLayer.removeChildren();
+      // }
+    
+      // background = continuous horizontal bands
+      for (let y = 0; y < view.size.height; y += bandHeight) {
+        // shade = grayscale stripes
+        const shade = (y % (bandHeight * 8)) / (bandHeight * 8);
+        const strokeColor = new paper.Color(shade);
+        let verticalPath = null;
+
+    
+        // draw row across width, segmented
+        let x = 0;
+        while (x < view.size.width) {
+          // check if this x,y falls inside any circle
+          let insideCircle = false;
+          for (let row = 0; row < rows; row++) {
+            const yCenter = (row + 1) * (view.size.height / (rows + 1));
+            for (let cx = circleSpacing; cx < view.size.width; cx += circleSpacing * 2) {
+              const dx = x - cx;
+              const dy = y - yCenter;
+              if (Math.sqrt(dx * dx + dy * dy) < circleRadius) {
+                insideCircle = true;
+              }
+            }
+          }
+    
+          if (insideCircle) {
+            // vertical segment
+            console.log({ x, y})
+            const bruh = new paper.Path.Line({
+              from: [x, y],
+              to: [x, y + bandHeight],
+              strokeColor,
+              strokeWidth: bandHeight,
+              name: "vertical-segment"
+            });
+            // bruh.rotate(30)
+          } else {
+            // horizontal segment
+            new paper.Path.Line({
+              from: [x, y],
+              to: [x, y + bandHeight],
+              strokeColor,
+              strokeWidth: bandHeight
+            });
+          }
+    
+          x += bandHeight; // step one “pixel” horizontally
+        }
       }
-
-      const drawLine = () => {
-        const { view } = paper;
-
-        new paper.Path({
-        segments: [
-            [0, view.size.height],
-            [view.size.width, 0]                 
-        ],
-        strokeColor: 'black',
-        strokeWidth: 2,
-        strokeCap: 'round',
-        name: 'pathToFind'
-        });
-      }
-
+    };
+    
     return (
         <div className="w-full h-full flex flex-col" ref={parentRef}>
             <canvas 
