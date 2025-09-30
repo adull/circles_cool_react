@@ -47,7 +47,7 @@ const Paper = () => {
     }
 
     const animate = (event) => {
-      const verticals = paper.project.getItems({ name: "vertical-segment" });
+      const verticals = paper.project.getItems({ name: "vertical-segment-row" });
       verticals.forEach((path) => {
         path.rotate(5, path.position); // rotate 1° per frame around its center
       });
@@ -60,7 +60,7 @@ const Paper = () => {
       const bandHeight = 8;       // thickness of each stripe
       const circleRadius = 60;    // controls "circle size"
       const circleSpacing = 160;  // horizontal spacing of circles
-      const rows = 5;             // number of rows of circle centers
+      const rows = 3;             // number of rows of circle centers
     
       // if (paper.project && paper.project.activeLayer) {
       //   paper.project.activeLayer.removeChildren();
@@ -68,17 +68,16 @@ const Paper = () => {
     
       // background = continuous horizontal bands
       for (let y = 0; y < view.size.height; y += bandHeight) {
-        // shade = grayscale stripes
         const shade = (y % (bandHeight * 8)) / (bandHeight * 8);
         const strokeColor = new paper.Color(shade);
-        let verticalPath = null;
-
-    
-        // draw row across width, segmented
-        let x = 0;
-        while (x < view.size.width) {
-          // check if this x,y falls inside any circle
+      
+        let inSegment = false;
+        let segStart = null;
+      
+        for (let x = 0; x < view.size.width; x += bandHeight) {
           let insideCircle = false;
+      
+          // --- check if (x, y) is inside a circle ---
           for (let row = 0; row < rows; row++) {
             const yCenter = (row + 1) * (view.size.height / (rows + 1));
             for (let cx = circleSpacing; cx < view.size.width; cx += circleSpacing * 2) {
@@ -89,31 +88,49 @@ const Paper = () => {
               }
             }
           }
-    
+      
           if (insideCircle) {
-            // vertical segment
-            console.log({ x, y})
-            const bruh = new paper.Path.Line({
-              from: [x, y],
-              to: [x, y + bandHeight],
-              strokeColor,
-              strokeWidth: bandHeight,
-              name: "vertical-segment"
-            });
-            // bruh.rotate(30)
+            // start of a new vertical segment
+            if (!inSegment) {
+              inSegment = true;
+              segStart = x;
+            }
           } else {
-            // horizontal segment
+            // if we were inside, close the segment
+            if (inSegment) {
+              new paper.Path.Line({
+                from: [segStart, y],
+                to: [x, y],
+                strokeColor,
+                strokeWidth: bandHeight,
+                name: `vertical-segment-row`
+              });
+              inSegment = false;
+              segStart = null;
+            }
+      
+            // horizontal fallback
             new paper.Path.Line({
               from: [x, y],
-              to: [x, y + bandHeight],
+              to: [x + bandHeight, y],
               strokeColor,
               strokeWidth: bandHeight
             });
           }
-    
-          x += bandHeight; // step one “pixel” horizontally
+        }
+      
+        // flush last vertical if row ends inside a circle
+        if (inSegment) {
+          new paper.Path.Line({
+            from: [segStart, y],
+            to: [view.size.width, y + bandHeight],
+            strokeColor,
+            strokeWidth: bandHeight,
+            name: `vertical-segment-row-${y}`
+          });
         }
       }
+      
     };
     
     return (
