@@ -24,11 +24,11 @@ const Paper = ({ logging }) => {
             paper.view.viewSize = new paper.Size(width, height)
             paper.view.update()
           }
-          setTimeout(drawPattern, 100)
+          setTimeout(() => { drawPattern(); attachCircleDragHandlers(); }, 100)
 
           paper.view.onFrame = () => {
             // animate(event);
-            updateCircles
+            // updateCircles()
           };
           
         }
@@ -41,6 +41,7 @@ const Paper = ({ logging }) => {
       window.addEventListener("mousemove", handleMouseMove);    
     
       observer.observe(element);
+
     
       return () => {
         observer.unobserve(element);
@@ -161,6 +162,8 @@ const Paper = ({ logging }) => {
         }
       });
     };
+
+    
 
 // const animate = (event) => {
 //   const X_ROTATION = true
@@ -304,6 +307,98 @@ const Paper = ({ logging }) => {
       }
     };
     
+    const attachCircleDragHandlers = () => {
+
+      // Clean up any old circle groups so we don't stack handlers on resize
+      paper.project.getItems({ name: /^circle-/ }).forEach(g => g.remove());
+    
+      // Collect vertical segments by circleId -> rowY
+      const verticals = paper.project.getItems({ name: /^vertical-segment-row-/ });
+      const circles = {}; // { [circleId]: { rows: { [rowY]: Path[] } } }
+    
+      verticals.forEach(path => {
+        const circleId = path.data?.circleId;
+        const rowY = path.data?.rowY;
+        if (circleId == null || rowY == null) return;
+    
+        if (!circles[circleId]) circles[circleId] = { rows: {} };
+        if (!circles[circleId].rows[rowY]) circles[circleId].rows[rowY] = [];
+        circles[circleId].rows[rowY].push(path);
+      });
+      console.log({ circles })
+    
+      // Build one Group per circle and attach drag listeners
+      Object.entries(circles).forEach(([circleId, { rows }]) => {
+        // Group all paths for this circle
+        const group = new paper.Group({ name: `circle-${circleId}` });
+        
+        const rowKeys = Object.keys(rows).map(Number).sort((a, b) => a - b);
+        rowKeys.forEach(y => rows[y].forEach(p => group.addChild(p)));
+    
+        // Compute a center & radius; add a transparent hit area for reliable dragging
+        const center = group.bounds.center.clone();
+        const radius = Math.max(group.bounds.width, group.bounds.height) / 2;
+        const hit = new paper.Path.Circle({
+          center,
+          radius,
+          fillColor: new paper.Color(0, 0, 0, 0.0001), // nearly invisible but hittable
+          name: `hit-${circleId}`,
+          data: {
+            groupRef: group
+          }
+        });
+        
+        group.data = {
+          rows,
+          rowKeys,
+          center,
+          radius
+        };
+
+        // console.log({ hit })
+        // hit.data.interactive = true;
+        // console.log(hit.parent)
+
+        // const hitbox = new paper.Path.Circle(group.bounds);
+        // hitbox.fillColor = new paper.Color(0, 0, 0, 0.00001); // invisible but clickable
+        // hitbox.onMouseDown = () => {console.log(`hit`)}
+        // group.add
+
+    
+        // Drag to "face" pointer: compute phase from vertical offset
+        hit.onMouseDrag = (e) => {
+          const g = hit.data.groupRef;
+          const { rows, rowKeys, center, radius } = g.data;
+
+          console.log({ rows, rowKeys,center,radius})
+    
+          // Vector from circle center to pointer; normalize to [-1, 1]
+          const rel = e.point.subtract(center);
+          const vy = Math.max(-1, Math.min(1, rel.y / radius));
+          const phase = (vy + 1) / 2; // 0..1
+    
+          const n = rowKeys.length;
+          for (let i = 0; i < n; i++) {
+            const mirrorIndex = n - 1 - i;
+            const yOriginal = rowKeys[i];
+            const yMirror   = rowKeys[mirrorIndex];
+            const yInterp   = yOriginal * (1 - phase) + yMirror * phase;
+    
+            rows[rowKeys[i]].forEach(path => {
+              const { x } = path.position;
+              path.position = new paper.Point(x, yInterp); // absolute set (no drift)
+              // path.position = mousePosRef.current
+            });
+          }
+    
+          e.stop(); // keep the event local to this circle
+        };
+    
+        // Optional: stop clicks from bubbling
+        group.onMouseDown = e => { e.stop(); };
+        group.onMouseUp   = e => { e.stop(); };
+      });
+    };
     
     return (
         <div className="w-full h-full flex flex-col" ref={parentRef}>
