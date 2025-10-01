@@ -70,157 +70,7 @@ const Paper = ({ logging }) => {
     const initPaper = () => {
       paper.setup("paper")
     }
-
-    let t = 0;
-    let frameCount = 0
-    const animated = (event) => {
-      frameCount++;
-      t += event.delta * 0.5; // advance phase
-      const phase = (Math.sin(t) + 1) / 2; // 0 → 1 → 0
     
-      const verticals = paper.project.getItems({ name: /^vertical-segment-row-/ });
-      let d 
-    
-      verticals.forEach((path) => {
-        const { rowY, circleId } = path.data;
-        // console.log({ rowY, circleId})
-        if (rowY == null || circleId == null) return;
-        // console.log({ rowY, circleId})
-    
-        // Circle center (cx, cy)
-        const cx = circleId * 160; // same spacing you used in drawPattern
-        const cy = rowY;              // base row height
-    
-        // Radii for ellipse projection
-        const rx = 60;        // horizontal radius (matches circleRadius)
-        const ry = 20;        // vertical radius (smaller → eye-level squish)
-    
-        // Parametric angle based on time + circle index (so circles spin independently)
-        const angle = t + circleId * 0.3;
-        // console.log({ angle })
-    
-        // New coordinates on the ellipse
-        const x = cx + rx * Math.cos(angle);
-        const y = cy + ry * Math.sin(angle);
-        console.log({ x, y})
-    
-        // Move the path to this absolute position
-        const { x: oldX, y: oldY } = path.position;
-
-        
-        const dx = x - oldX;
-        const dy = y - oldY;
-        // console.log({ dx, dy})
-        path.translate(new paper.Point(dx, dy));
-      });
-    
-      if (loggingRef.current && frameCount % 60 === 0) {
-        console.log(d)
-        console.log("phase", phase, "t", t);
-      }
-    };
-
-    const updateCircles = () => {
-      const verticals = paper.project.getItems({ name: /^vertical-segment-row-/ });
-    
-      // group by circle
-      const circles = {};
-      verticals.forEach(path => {
-        const rowY = path.data?.rowY;
-        const circleId = path.data?.circleId;
-        if (rowY == null || circleId == null) return;
-    
-        if (!circles[circleId]) circles[circleId] = { rows: {}, cx: null, cy: null };
-        if (!circles[circleId].rows[rowY]) circles[circleId].rows[rowY] = [];
-        circles[circleId].rows[rowY].push(path);
-      });
-    
-      // Now apply transforms
-      Object.entries(circles).forEach(([circleId, circle]) => {
-        // find center of this circle (cx, cy)
-        // (your drawPattern already defines row + col spacing)
-        const [row, col] = circleId.split("-").map(Number);
-        const cx = (col * 2 + 1) * 160;              // same spacing logic as drawPattern
-        const cy = (row + 1) * (paper.view.size.height / 4);
-    
-        const { angleX, angleY } = getCircleRotation(cx, cy, mousePosRef.current.x, mousePosRef.current.y);
-    
-        const keys = Object.keys(circle.rows).map(Number).sort((a, b) => a - b);
-        const n = keys.length;
-    
-        for (let i = 0; i < n; i++) {
-          const mirrorIndex = n - 1 - i;
-    
-          const yOriginal = keys[i];
-          const yMirror   = keys[mirrorIndex];
-          const yInterp   = yOriginal * (1 - (angleY + 0.5)) + yMirror * (angleY + 0.5);
-    
-          circle.rows[keys[i]].forEach(path => {
-            const { x } = path.position;
-            path.position = new paper.Point(x + angleX * 20, yInterp); // shift x a bit with angleX
-          });
-        }
-      });
-    };
-
-    
-
-// const animate = (event) => {
-//   const X_ROTATION = true
-//   frameCount++;
-//   const verticals = paper.project.getItems({ name: /^vertical-segment-row-/ });
-  
-//   // circles[circleId][rowY] -> Path[]
-//   const circles = {};
-//   verticals.forEach(path => {
-//     if(X_ROTATION) {
-//       // const pathPosition  = {x: path.position.x - 500, y: path.position.y}
-//       // console.log({ pathPosition})
-//       path.rotate(1, path.position);     
-//     }  
-  
-//     const rowY = path.data?.rowY;
-//     const circleId = path.data?.circleId;
-//     if (rowY == null || circleId == null) return;
-
-//     if (!circles[circleId]) circles[circleId] = {};
-//     if (!circles[circleId][rowY]) circles[circleId][rowY] = [];
-//     circles[circleId][rowY].push(path);
-//   });
-
-//   // phase 0..1
-//   t += event.delta * 0.5;
-//   const phase = (Math.sin(t) + 1) / 2;
-//   // t += event.delta * 0.5; // speed factor
-// // const phase = (t % 1);
-
-//   // For each circle, mirror top/bottom rows within that circle only
-//   Object.entries(circles).forEach(([circleId, rowsByY]) => {
-//     const keys = Object.keys(rowsByY).map(Number).sort((a, b) => a - b);
-//     const n = keys.length;
-
-//     for (let i = 0; i < n; i++) {
-//       const mirrorIndex = n - 1 - i;
-
-//       const yOriginal = keys[i];
-//       const yMirror   = keys[mirrorIndex];
-//       const yInterp   = yOriginal * (1 - phase) + yMirror * phase;
-
-//       rowsByY[keys[i]].forEach(path => {
-//         const { x } = path.position;
-//         // set absolute y to avoid drift
-//         path.position = new paper.Point(x, yInterp);
-//       });
-//     }
-//   });
-
-//   // ✅ your logging block
-//   if (loggingRef.current) {
-//     if (frameCount % 30 === 0) {
-//       console.log("phase", phase, "circles", circles);
-//     }
-//   }
-// };
 
 
     
@@ -307,12 +157,10 @@ const Paper = ({ logging }) => {
       }
     };
     
-    const attachCircleDragHandlers = () => {
+    const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
-      // Clean up any old circle groups so we don't stack handlers on resize
-      paper.project.getItems({ name: /^circle-/ }).forEach(g => g.remove());
-    
-      // Collect vertical segments by circleId -> rowY
+    const attachCircleDragHandlers = () => {
+      // collect segments by circleId -> rowY
       const verticals = paper.project.getItems({ name: /^vertical-segment-row-/ });
       const circles = {}; // { [circleId]: { rows: { [rowY]: Path[] } } }
     
@@ -325,80 +173,87 @@ const Paper = ({ logging }) => {
         if (!circles[circleId].rows[rowY]) circles[circleId].rows[rowY] = [];
         circles[circleId].rows[rowY].push(path);
       });
-      console.log({ circles })
     
-      // Build one Group per circle and attach drag listeners
+      // create a group per circle and a sibling hitbox mapped to it
       Object.entries(circles).forEach(([circleId, { rows }]) => {
-        // Group all paths for this circle
+        // group with all circle paths
         const group = new paper.Group({ name: `circle-${circleId}` });
-        
         const rowKeys = Object.keys(rows).map(Number).sort((a, b) => a - b);
         rowKeys.forEach(y => rows[y].forEach(p => group.addChild(p)));
     
-        // Compute a center & radius; add a transparent hit area for reliable dragging
+        // compute center/radius from group's bounds
         const center = group.bounds.center.clone();
         const radius = Math.max(group.bounds.width, group.bounds.height) / 2;
-        const hit = new paper.Path.Circle({
+    
+        // external, clickable hitbox (NOT added to the group)
+        const hitbox = new paper.Path.Circle({
           center,
           radius,
-          fillColor: new paper.Color(0, 0, 0, 0.0001), // nearly invisible but hittable
-          name: `hit-${circleId}`,
-          data: {
-            groupRef: group
+          fillColor: new paper.Color(0, 0, 0, 0.001), // nearly invisible but hit-testable
+          name: `hit-${circleId}`
+        });
+        hitbox.bringToFront();
+    
+        // map data we need during drag
+        hitbox.data.groupRef = group;
+        hitbox.data.rowsByY = rows;
+        hitbox.data.rowKeys = rowKeys;
+        hitbox.data.center = center;
+        hitbox.data.radius = radius;
+    
+        // store per-path absolute rotation so we can set it deterministically per drag
+        group.children.forEach(child => {
+          if (child.name?.startsWith('vertical-segment-row-')) {
+            child.data.rotDeg = 0; // current absolute rotation we've applied
           }
         });
-        
-        group.data = {
-          rows,
-          rowKeys,
-          center,
-          radius
-        };
-
-        // console.log({ hit })
-        // hit.data.interactive = true;
-        // console.log(hit.parent)
-
-        // const hitbox = new paper.Path.Circle(group.bounds);
-        // hitbox.fillColor = new paper.Color(0, 0, 0, 0.00001); // invisible but clickable
-        // hitbox.onMouseDown = () => {console.log(`hit`)}
-        // group.add
-
     
-        // Drag to "face" pointer: compute phase from vertical offset
-        hit.onMouseDrag = (e) => {
-          const g = hit.data.groupRef;
-          const { rows, rowKeys, center, radius } = g.data;
-
-          console.log({ rows, rowKeys,center,radius})
+        // DRAG: face the cursor using local vx/vy relative to this circle's center
+        hitbox.onMouseDrag = (e) => {
+          const g = hitbox.data.groupRef;
+          const { rowsByY, rowKeys, center, radius } = hitbox.data;
     
-          // Vector from circle center to pointer; normalize to [-1, 1]
+          // local vector center->mouse (same world space as center)
           const rel = e.point.subtract(center);
-          const vy = Math.max(-1, Math.min(1, rel.y / radius));
-          const phase = (vy + 1) / 2; // 0..1
+          const vx = clamp(rel.x / radius, -1, 1);
+          const vy = clamp(rel.y / radius, -1, 1);
     
+          // vertical "tilt": use your mirror interpolation with phase from vy
+          const phase = (vy + 1) / 2; // 0..1
           const n = rowKeys.length;
           for (let i = 0; i < n; i++) {
-            const mirrorIndex = n - 1 - i;
+            const mi = n - 1 - i;
             const yOriginal = rowKeys[i];
-            const yMirror   = rowKeys[mirrorIndex];
+            const yMirror   = rowKeys[mi];
             const yInterp   = yOriginal * (1 - phase) + yMirror * phase;
     
-            rows[rowKeys[i]].forEach(path => {
+            rowsByY[rowKeys[i]].forEach(path => {
               const { x } = path.position;
-              path.position = new paper.Point(x, yInterp); // absolute set (no drift)
-              // path.position = mousePosRef.current
+              path.position = new paper.Point(x, yInterp); // absolute set, no drift
             });
           }
     
-          e.stop(); // keep the event local to this circle
-        };
+          // horizontal "face": rotate each vertical segment based on vx
+          // keep it bounded so it never looks taller than original
+          const MAX_ROT_DEG = 35; // tweak
+          const targetDeg = vx * MAX_ROT_DEG;
     
-        // Optional: stop clicks from bubbling
-        group.onMouseDown = e => { e.stop(); };
-        group.onMouseUp   = e => { e.stop(); };
+          g.children.forEach(child => {
+            if (child.name?.startsWith('vertical-segment-row-')) {
+              const cur = child.data.rotDeg || 0;
+              const delta = targetDeg - cur; // make it absolute
+              if (delta !== 0) {
+                child.rotate(delta, child.position);
+                child.data.rotDeg = targetDeg;
+              }
+            }
+          });
+    
+          e.stop(); // keep drag local to this circle
+        };
       });
     };
+    
     
     return (
         <div className="w-full h-full flex flex-col" ref={parentRef}>
