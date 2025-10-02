@@ -3,7 +3,6 @@ import Paper from './Paper'
 
 const Body = () => {
     const [height, setHeight] = useState(300)
-    const [logging, setLogging] = useState(true);
 
     useEffect(() => {
         const bullshitHeight = 100
@@ -14,8 +13,7 @@ const Body = () => {
     return (
         <div className="container mx-auto pb-6" style={{ height }}>
             <div className="h-[100%] w-full">
-                Logging: <input type="checkbox" value={logging} onChange={() => setLogging(!logging)} />
-                <Paper logging={logging}/> 
+                <Paper /> 
             </div>
         </div>
     );
