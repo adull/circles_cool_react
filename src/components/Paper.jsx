@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
+import { easeOutBack, lerp, clamp, syncTimeToPhase } from '../helpers';
 import { paper } from 'paper'
 
 const Paper = ({ logging }) => {
@@ -6,6 +7,7 @@ const Paper = ({ logging }) => {
     const parentRef = useRef(null)
     const childRef = useRef(null)
     const mousePosRef = useRef({x: 0, y: 0})
+    const WAVESPEED = 0.5
 
     const [display, setDisplay] = useState({ width: 0, height: 0})
 
@@ -57,29 +59,41 @@ const Paper = ({ logging }) => {
     const initPaper = () => {
       paper.setup("paper")
     }
+    // let deltalimit = 1
     const animate = (event) => {
       paper.project.getItems({ name: /^hit-/ }).forEach(hitbox => {
-        // const { groupRef, rowsByY, rowKeys, isDragging } = hitbox.data;
-        // if (!groupRef || !rowKeys) return;
+        // 1) world time always advances
     
-        // Always advance time — but don’t modify visuals while dragging
-        // hitbox.data.t += event.delta * 0.5;
-        const { isDragging } = hitbox.data;
-
-        if (isDragging) return;
-        hitbox.data.t = (hitbox.data.t ?? 0) + event.delta * 0.5;
-        // hitbox.data.t += event.delta * 0.5;
-        
-        const phaseY = (Math.sin(hitbox.data.t) + 1) / 2;
-        const rotX = Math.cos(hitbox.data.t) * 0.1;
+        // skip visuals while dragging
+        if (hitbox.data.isDragging) return;
+        hitbox.data.t = (hitbox.data.t ?? 0) + event.delta * WAVESPEED;
     
-        // Smooth continuous oscillation
-        // const phase = (Math.sin(hitbox.data.t + hitbox.data.phaseOffset) + 1) / 2;
-        applyPhaseToCircle(hitbox, phaseY, rotX)
+        // 2) if we just released, sync t exactly to the released phase once
+        if (hitbox.data.syncToLastPhase && hitbox.data.lastPhaseY != null) {
+          console.log(`go here`)
+          syncTimeToPhase(hitbox, hitbox.data.lastPhaseY);
+          hitbox.data.syncToLastPhase = false;
+        }
+    
+        // 3) target from the running wave
+        const targetPhaseY = (Math.sin(hitbox.data.t) + 1) / 2;
+        const targetRotX   = Math.cos(hitbox.data.t) * 0.1;
+    
+        // 4) blend from what we had (prevents tiny frame jitter / “snap”)
+        const k = 10; // smoothing strength; higher = snappier
+        const alpha = 1 - Math.exp(-k * event.delta);
+        const prevPhaseY = hitbox.data.lastPhaseY ?? targetPhaseY;
+        const prevRotX   = hitbox.data.lastRotX   ?? targetRotX;
+    
+        const phaseY = prevPhaseY + (targetPhaseY - prevPhaseY) * alpha;
+        const rotX   = prevRotX   + (targetRotX   - prevRotX)   * alpha;
+    
+        applyPhaseToCircle(hitbox, phaseY, rotX);
+    
         hitbox.data.lastPhaseY = phaseY;
-
+        hitbox.data.lastRotX   = rotX;
       });
-    }
+    };
     
     const applyPhaseToCircle = (hitbox, phase, rotX = 0) => {
       const { rowsByY, rowKeys, groupRef } = hitbox.data;
@@ -194,9 +208,6 @@ const Paper = ({ logging }) => {
         }
       }
     }
-    
-    
-    const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
     const setCursor = (cursor) => {
       if (paper.view && paper.view.element) {
@@ -264,56 +275,24 @@ const Paper = ({ logging }) => {
         hitbox.onMouseDrag = (e) => {
           hitbox.data.isDragging = true;
           const { center, radius } = hitbox.data;
-        
-          const rel = e.point.subtract(center);
-          const vx = clamp(rel.x / radius, -1, 1);
-          const vy = clamp(rel.y / radius, -1, 1);
-        
-          const phaseY = (vy + 1) / 2;
-          const rotX = vx;
-        
-          hitbox.data.lastPhaseY = phaseY;
-          hitbox.data.lastRotX = rotX;
-          applyPhaseToCircle(hitbox, phaseY, rotX);
-        };
-        
-        hitbox.onMouseUp = (e) => {
-          const { center, radius } = hitbox.data;
+
           const rel = e.point.subtract(center);
           const vx = clamp(rel.x / radius, -1, 1);
           const vy = clamp(rel.y / radius, -1, 1);
 
-          
+          const phaseY = (vy + 1) / 2;
+          const rotX = vx;
+
+          hitbox.data.lastPhaseY = phaseY;
+          hitbox.data.lastRotX   = rotX;
+          applyPhaseToCircle(hitbox, phaseY, rotX);
+        };
         
-          const startPhaseY = hitbox.data.lastPhaseY ?? (vy + 1) / 2;
-          const targetPhaseY = (Math.sin(hitbox.data.t  ?? 0) + 1) / 2; // continue sine motion
-          const startRotX = vx;
-        
-          hitbox.data.isDragging = true;
-        
-          const duration = 1200;
-          const startTime = performance.now();
-        
-          const ease = (t) => 0.5 - 0.5 * Math.cos(Math.PI * t);
-        
-          const step = (now) => {
-            const elapsed = now - startTime;
-            const progress = Math.min(elapsed / duration, 1);
-            const eased = ease(progress);
-        
-            const interpY = startPhaseY + (targetPhaseY - startPhaseY) * eased;
-            const interpX = startRotX * (1 - eased); // smoothly return X rotation to neutral
-        
-            applyPhaseToCircle(hitbox, interpY, interpX);
-        
-            if (progress < 1) {
-              requestAnimationFrame(step);
-            } else {
-              hitbox.data.isDragging = false;
-            }
-          };
-        
-          requestAnimationFrame(step);
+        hitbox.onMouseUp = (e) => {
+          const { lastPhaseY, lastRotX } = hitbox.data;
+          applyPhaseToCircle(hitbox, lastPhaseY, lastRotX);
+          hitbox.data.isDragging = false;
+          hitbox.data.syncToLastPhase = true
         };
         
         
