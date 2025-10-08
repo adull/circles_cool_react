@@ -24,6 +24,7 @@ const Paper = ({ logging }) => {
             paper.view.viewSize = new paper.Size(width, height)
             paper.view.update()
           }
+          console.log(`ummm is it here/?`)
           setTimeout(() => { drawPattern(); attachCircleDragHandlers(); }, 100)
 
           paper.view.onFrame = (event) => {
@@ -79,7 +80,7 @@ const Paper = ({ logging }) => {
           });
         }
     
-        const MAX_ROT_DEG = 15;
+        const MAX_ROT_DEG = 360;
         const targetDeg = Math.sin(hitbox.data.t) * MAX_ROT_DEG;
     
         groupRef.children.forEach(child => {
@@ -100,73 +101,153 @@ const Paper = ({ logging }) => {
 
     
     const drawPattern = () => {
+      console.log(`start with draw pattern`)
       const { view } = paper;
+      const { width, height } = view.size
+      const isMobile = window.innerWidth < 769
+      
+      const rows = 3;
+      const cols = isMobile ? 3 : 4
+      
       const bandHeight = 8;
-      const circleRadius = 60;
-      const circleSpacing = 160;
-      const rows = 3; // number of circle-center rows
+      const circleRadius = bandHeight * 10;
+      const numShades = 8;
+
+      const heightRemainder = height % (bandHeight * numShades)
+      const newHeight = height - heightRemainder
+      const xSpacing = (height - circleRadius * rows) / rows
+      const ySpacing = (newHeight - circleRadius * cols) / cols
+
+      const bgLayer = new paper.Layer();
+      const fgLayer = new paper.Layer();
     
-      for (let y = 0; y < view.size.height; y += bandHeight) {
-        const shade = (y % (bandHeight * 8)) / (bandHeight * 8);
+      // draw initial lines
+      for (let y = 0; y < newHeight; y += bandHeight) {
+        const shade = (y % (bandHeight * numShades)) / (bandHeight * numShades);
         const strokeColor = new paper.Color(shade);
-    
-        let inSegment = false;
-        let segStart = null;
-        let segCircleId = null; // <- store which circle this vertical segment belongs to
-    
-        for (let x = 0; x < view.size.width; x += bandHeight) {
-          // figure out if (x,y) is inside ANY circle and which one
-          let insideCircleId = null;
-    
-          for (let row = 0; row < rows; row++) {
-            const yCenter = (row + 1) * (view.size.height / (rows + 1));
-            let col = 0;
-            for (let cx = circleSpacing; cx < view.size.width; cx += circleSpacing * 2) {
-              const dx = x - cx;
-              const dy = y - yCenter;
-              if (Math.sqrt(dx * dx + dy * dy) < circleRadius) {
-                // unique id per circle across all rows: "<row>-<col>"
-                insideCircleId = `${row}-${col}`;
-                break; // we can stop at the first hit
-              }
-              col++;
-            }
-            if (insideCircleId) break;
-          }
-    
-          if (insideCircleId) {
-            if (!inSegment) {
-              inSegment = true;
-              segStart = x;
-              segCircleId = insideCircleId;
-            }
-          } else {
-            if (inSegment) {
-              // close the vertical segment and tag row+circle
-              new paper.Path.Line({
-                from: [segStart, y],
-                to: [x, y],
-                strokeColor,
-                strokeWidth: bandHeight,
-                name: `vertical-segment-row-${y}`,
-                data: { rowY: y, circleId: segCircleId, zIndex: 0 }
-              })
-              // .sendToBack();
-              inSegment = false;
-              segStart = null;
-              segCircleId = null;
-            }
-    
-            // horizontal fallback
-            new paper.Path.Line({
-              from: [x, y],
-              to: [x + bandHeight, y],
-              strokeColor,
-              strokeWidth: bandHeight
+        new paper.Path.Line({
+          from: [0, y],
+          to: [width, y],
+          strokeColor,
+          strokeWidth: bandHeight,
+          name: `vertical-segment-row-${y}`,
+          data: { rowY: y, zIndex: 0 }
+        })
+      }
+
+      const totalGridWidth = cols * ( 2 * circleRadius) + (cols - 1) * xSpacing
+      const totalGridHeight = rows * ( 2 * circleRadius) + (rows - 1) * ySpacing
+      const offsetX = (width - totalGridWidth) / 2
+      const offsetY = (newHeight - totalGridHeight) / 2
+
+      // draw the initial circles that we'll "cut" out of the initial lines
+      // let segCircleId = 0
+      for(let colIndex = 0; colIndex < cols; colIndex++) {
+        for(let rowIndex = 0; rowIndex < rows; rowIndex++) {
+          // segCircleId++
+          const segCircleId = `${rowIndex}-${colIndex}`
+          const x = offsetX + colIndex  * (2 * circleRadius + xSpacing) + circleRadius
+          const y = offsetY + rowIndex * (2 * circleRadius + ySpacing) + circleRadius
+          const center = new paper.Point(x, y)
+          
+          for (let yOffset = -circleRadius; yOffset <= circleRadius; yOffset += bandHeight) {
+            
+            const absoluteY = center.y + yOffset;
+            const shade = (absoluteY % (bandHeight * numShades)) / (bandHeight * numShades);
+            console.log({ segCircleId })
+            // change back to color(shade) when done debugg
+            // const fillColor = new paper.Color(shade + 0.4);
+            const fillColor = new paper.Color(shade);
+
+      
+            // Find the half-width at this height (circle equation)
+            const halfWidth = Math.sqrt(Math.max(0, circleRadius ** 2 - yOffset ** 2));
+      
+            // Draw a horizontal rectangle (bar)
+            new paper.Path.Rectangle({
+              from: [center.x - halfWidth, absoluteY - bandHeight / 2],
+              to: [center.x + halfWidth, absoluteY + bandHeight / 2],
+              // fillColor: new paper.Color('red')
+              name: `vertical-segment-row-${absoluteY.toFixed(0)}`,
+              data: {
+                rowY: absoluteY,
+                circleId: segCircleId,
+                zIndex: 0
+              },
+
+              fillColor
             });
           }
+      
         }
       }
+
+
+    
+      //   let inSegment = false;
+      //   let segStart = null;
+      //   let segCircleId = null; // <- store which circle this vertical segment belongs to
+    
+      //   for (let x = 0; x < view.size.width; x += bandHeight) {
+      //     // figure out if (x,y) is inside ANY circle and which one
+      //     let insideCircleId = null;
+    
+      //     for (let row = 0; row < rows; row++) {
+      //       const yCenter = (row + 1) * (view.size.height / (rows + 1));
+      //       let col = 0;
+      //       console.log(row)
+      //       for (let cx = circleSpacing; cx < view.size.width; cx += circleSpacing * 2) {
+      //         console.log(`inside this one wow thats a lot of loops`)
+      //         const dx = x - cx;
+      //         const dy = y - yCenter;
+      //         if (Math.sqrt(dx * dx + dy * dy) < circleRadius) {
+      //           // unique id per circle across all rows: "<row>-<col>"
+      //           insideCircleId = `${row}-${col}`;
+      //           break; // we can stop at the first hit
+      //         }
+      //         col++;
+      //       }
+      //       if (insideCircleId) break;
+      //     }
+    
+      //     if (insideCircleId) {
+      //       if (!inSegment) {
+      //         inSegment = true;
+      //         segStart = x;
+      //         segCircleId = insideCircleId;
+      //       }
+      //     } else {
+      //       if (inSegment) {
+      //         // close the vertical segment and tag row+circle
+      //         const inSegLine = new paper.Path.Line({
+      //           from: [segStart, y],
+      //           to: [x, y],
+      //           strokeColor,
+      //           strokeWidth: bandHeight,
+      //           name: `vertical-segment-row-${y}`,
+      //           data: { rowY: y, circleId: segCircleId, zIndex: 0 }
+      //         })
+      //         bgLayer.addChild(inSegLine);
+      //         // .sendToBack();
+      //         inSegment = false;
+      //         segStart = null;
+      //         segCircleId = null;
+      //       }
+    
+      //       // horizontal fallback
+      //       const outSegLine = new paper.Path.Line({
+      //         from: [x, y],
+      //         to: [x + bandHeight, y],
+      //         strokeColor,
+      //         strokeWidth: bandHeight
+      //       });
+      //       fgLayer.addChild(outSegLine);
+      //     }
+      //     bgLayer.sendToBack() 
+      //     fgLayer.bringToFront()
+      //   }
+      // }
+      console.log(`done drawing the pattern`)
     }
     
     
@@ -261,7 +342,7 @@ const Paper = ({ logging }) => {
             });
           }
         
-          const MAX_ROT_DEG = 15;
+          const MAX_ROT_DEG = 90;
           const targetDeg = vx * MAX_ROT_DEG;
         
           g.children.forEach(child => {
