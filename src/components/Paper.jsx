@@ -59,43 +59,62 @@ const Paper = ({ logging }) => {
     }
     const animate = (event) => {
       paper.project.getItems({ name: /^hit-/ }).forEach(hitbox => {
-        if (hitbox.data?.isUserControlled) return;
+        // const { groupRef, rowsByY, rowKeys, isDragging } = hitbox.data;
+        // if (!groupRef || !rowKeys) return;
     
-        const { groupRef, rowsByY, rowKeys } = hitbox.data;
-        if (!groupRef || !rowKeys) return;
-    
+        // Always advance time — but don’t modify visuals while dragging
+        // hitbox.data.t += event.delta * 0.5;
+        const { isDragging } = hitbox.data;
+
+        if (isDragging) return;
         hitbox.data.t = (hitbox.data.t ?? 0) + event.delta * 0.5;
-        const phase = (Math.sin(hitbox.data.t) + 1) / 2;
+        // hitbox.data.t += event.delta * 0.5;
+        
+        const phaseY = (Math.sin(hitbox.data.t) + 1) / 2;
+        const rotX = Math.cos(hitbox.data.t) * 0.1;
     
-        const n = rowKeys.length;
-        for (let i = 0; i < n; i++) {
-          const mi = n - 1 - i;
-          const yOriginal = rowKeys[i];
-          const yMirror   = rowKeys[mi];
-          const yInterp   = yOriginal * (1 - phase) + yMirror * phase;
-    
-          rowsByY[rowKeys[i]].forEach(path => {
-            const { x } = path.position;
-            path.position = new paper.Point(x, yInterp);
-          });
-        }
-    
-        const MAX_ROT_DEG = 360;
-        const targetDeg = Math.sin(hitbox.data.t) * MAX_ROT_DEG;
-    
-        groupRef.children.forEach(child => {
-          if (child.name?.startsWith("vertical-segment-row-")) {
-            const cur = child.data.rotDeg || 0;
-            const delta = targetDeg - cur;
-            if (delta) {
-              child.rotate(delta, child.position);
-              child.data.rotDeg = targetDeg;
-            }
-          }
-        });
+        // Smooth continuous oscillation
+        // const phase = (Math.sin(hitbox.data.t + hitbox.data.phaseOffset) + 1) / 2;
+        applyPhaseToCircle(hitbox, phaseY, rotX)
+        hitbox.data.lastPhaseY = phaseY;
+
       });
-    };
+    }
     
+    const applyPhaseToCircle = (hitbox, phase, rotX = 0) => {
+      const { rowsByY, rowKeys, groupRef } = hitbox.data;
+      if (!rowsByY || !rowKeys || !groupRef) return;
+    
+      const n = rowKeys.length;
+    
+      // deform rows
+      for (let i = 0; i < n; i++) {
+        const mi = n - 1 - i;
+        const yOriginal = rowKeys[i];
+        const yMirror = rowKeys[mi];
+        const yInterp = yOriginal * (1 - phase) + yMirror * phase;
+    
+        rowsByY[yOriginal].forEach(path => {
+          const { x } = path.position;
+          path.position = new paper.Point(x, yInterp);
+        });
+      }
+    
+      // rotate
+      const MAX_ROT_DEG = 360;
+      // const targetDeg = (phase - 0.5) * 2 * MAX_ROT_DEG;
+      const targetDeg = rotX * MAX_ROT_DEG;
+      groupRef.children.forEach(child => {
+        if (child.name?.startsWith("vertical-segment-row-")) {
+          const cur = child.data.rotDeg || 0;
+          const delta = targetDeg - cur;
+          if (delta !== 0) {
+            child.rotate(delta, child.position);
+            child.data.rotDeg = targetDeg;
+          }
+        }
+      });
+    }
     
 
 
@@ -118,9 +137,6 @@ const Paper = ({ logging }) => {
       const xSpacing = (height - circleRadius * rows) / rows
       const ySpacing = (newHeight - circleRadius * cols) / cols
 
-      const bgLayer = new paper.Layer();
-      const fgLayer = new paper.Layer();
-    
       // draw initial lines
       for (let y = 0; y < newHeight; y += bandHeight) {
         const shade = (y % (bandHeight * numShades)) / (bandHeight * numShades);
@@ -141,7 +157,6 @@ const Paper = ({ logging }) => {
       const offsetY = (newHeight - totalGridHeight) / 2
 
       // draw the initial circles that we'll "cut" out of the initial lines
-      // let segCircleId = 0
       for(let colIndex = 0; colIndex < cols; colIndex++) {
         for(let rowIndex = 0; rowIndex < rows; rowIndex++) {
           // segCircleId++
@@ -154,9 +169,6 @@ const Paper = ({ logging }) => {
             
             const absoluteY = center.y + yOffset;
             const shade = (absoluteY % (bandHeight * numShades)) / (bandHeight * numShades);
-            console.log({ segCircleId })
-            // change back to color(shade) when done debugg
-            // const fillColor = new paper.Color(shade + 0.4);
             const fillColor = new paper.Color(shade);
 
       
@@ -181,73 +193,6 @@ const Paper = ({ logging }) => {
       
         }
       }
-
-
-    
-      //   let inSegment = false;
-      //   let segStart = null;
-      //   let segCircleId = null; // <- store which circle this vertical segment belongs to
-    
-      //   for (let x = 0; x < view.size.width; x += bandHeight) {
-      //     // figure out if (x,y) is inside ANY circle and which one
-      //     let insideCircleId = null;
-    
-      //     for (let row = 0; row < rows; row++) {
-      //       const yCenter = (row + 1) * (view.size.height / (rows + 1));
-      //       let col = 0;
-      //       console.log(row)
-      //       for (let cx = circleSpacing; cx < view.size.width; cx += circleSpacing * 2) {
-      //         console.log(`inside this one wow thats a lot of loops`)
-      //         const dx = x - cx;
-      //         const dy = y - yCenter;
-      //         if (Math.sqrt(dx * dx + dy * dy) < circleRadius) {
-      //           // unique id per circle across all rows: "<row>-<col>"
-      //           insideCircleId = `${row}-${col}`;
-      //           break; // we can stop at the first hit
-      //         }
-      //         col++;
-      //       }
-      //       if (insideCircleId) break;
-      //     }
-    
-      //     if (insideCircleId) {
-      //       if (!inSegment) {
-      //         inSegment = true;
-      //         segStart = x;
-      //         segCircleId = insideCircleId;
-      //       }
-      //     } else {
-      //       if (inSegment) {
-      //         // close the vertical segment and tag row+circle
-      //         const inSegLine = new paper.Path.Line({
-      //           from: [segStart, y],
-      //           to: [x, y],
-      //           strokeColor,
-      //           strokeWidth: bandHeight,
-      //           name: `vertical-segment-row-${y}`,
-      //           data: { rowY: y, circleId: segCircleId, zIndex: 0 }
-      //         })
-      //         bgLayer.addChild(inSegLine);
-      //         // .sendToBack();
-      //         inSegment = false;
-      //         segStart = null;
-      //         segCircleId = null;
-      //       }
-    
-      //       // horizontal fallback
-      //       const outSegLine = new paper.Path.Line({
-      //         from: [x, y],
-      //         to: [x + bandHeight, y],
-      //         strokeColor,
-      //         strokeWidth: bandHeight
-      //       });
-      //       fgLayer.addChild(outSegLine);
-      //     }
-      //     bgLayer.sendToBack() 
-      //     fgLayer.bringToFront()
-      //   }
-      // }
-      console.log(`done drawing the pattern`)
     }
     
     
@@ -295,8 +240,9 @@ const Paper = ({ logging }) => {
             rowKeys: rowKeys,
             center,
             radius,
-            isUserControlled: false,
-            t: 0
+            t: 0,
+            phaseOffset: 0,
+            isDragging: false
           }
         });
 
@@ -316,90 +262,119 @@ const Paper = ({ logging }) => {
         };
 
         hitbox.onMouseDrag = (e) => {
-          setCursor("grabbing");
-          hitbox.data.isUserControlled = true;
-        
-          const g = hitbox.data.groupRef;
-          const { rowsByY, rowKeys, center, radius } = hitbox.data;
+          hitbox.data.isDragging = true;
+          const { center, radius } = hitbox.data;
         
           const rel = e.point.subtract(center);
           const vx = clamp(rel.x / radius, -1, 1);
           const vy = clamp(rel.y / radius, -1, 1);
         
-          const phase = (vy + 1) / 2;
-          hitbox.data.lastVy = vy;  
+          const phaseY = (vy + 1) / 2;
+          const rotX = vx;
         
-          const n = rowKeys.length;
-          for (let i = 0; i < n; i++) {
-            const mi = n - 1 - i;
-            const yOriginal = rowKeys[i];
-            const yMirror   = rowKeys[mi];
-            const yInterp   = yOriginal * (1 - phase) + yMirror * phase;
-        
-            rowsByY[rowKeys[i]].forEach(path => {
-              const { x } = path.position;
-              path.position = new paper.Point(x, yInterp);
-            });
-          }
-        
-          const MAX_ROT_DEG = 90;
-          const targetDeg = vx * MAX_ROT_DEG;
-        
-          g.children.forEach(child => {
-            if (child.name?.startsWith("vertical-segment-row-")) {
-              const cur = child.data.rotDeg || 0;
-              const delta = targetDeg - cur;
-              if (delta !== 0) {
-                child.rotate(delta, child.position);
-                child.data.rotDeg = targetDeg;
-              }
-            }
-          });
-        
-          e.stop();
+          hitbox.data.lastPhaseY = phaseY;
+          hitbox.data.lastRotX = rotX;
+          applyPhaseToCircle(hitbox, phaseY, rotX);
         };
-
+        
         hitbox.onMouseUp = (e) => {
-          hitbox.data.isUserControlled = false;
-
-          const { rowsByY, rowKeys, center } = hitbox.data;
-          if (!rowKeys || rowKeys.length < 2) return;
-
-          const yTop = rowKeys[0];
-          const yBot = rowKeys[rowKeys.length - 1];
-          const samplePath = rowsByY[yTop]?.[0];
-          if (!samplePath) return;
-
-          const yCur = samplePath.position.y;
-          const denom = (yBot - yTop) || 1;
-
-          const phase = clamp((yCur - yTop) / denom, 0, 1);
-          const s = 2 * phase - 1;
-
-          const dirIncreasing = (hitbox.data.lastVy ?? 0) >= 0;
-          const cAbs = Math.sqrt(Math.max(0, 1 - s * s));
-          const c = dirIncreasing ? cAbs : -cAbs;
-
-          hitbox.data.t = Math.atan2(s, c);
-        
+          const { center, radius } = hitbox.data;
           const rel = e.point.subtract(center);
           const vx = clamp(rel.x / radius, -1, 1);
           const vy = clamp(rel.y / radius, -1, 1);
-
-          const isVertical = vy < 0.05 || vy > 0.95
-          const isNotSlanted = (vx >= 0 && vx < 0.1) || (vx <= 0 && vx > -0.1)
-          if(isVertical && isNotSlanted) {
-            hitbox.data.isUserControlled = true;
-          }
-
-          const mousePt = paper.view.getEventPoint(event);
-          if (hitbox.contains(mousePt)) {
-            setCursor("grab"); 
-          } else {
-            setCursor("default");
-          }
-
+        
+          const startPhaseY = hitbox.data.lastPhaseY ?? (vy + 1) / 2;
+          const currentT = hitbox.data.t ?? 0;
+        
+          // How far we are from the continuous wave
+          const naturalPhaseY = (Math.sin(currentT) + 1) / 2;
+        
+          // Distance along wave (0–1)
+          const diff = naturalPhaseY - startPhaseY;
+        
+          // Base duration scaled by distance (short distance = faster)
+          const baseDuration = 3.3; // seconds
+          const duration = baseDuration * Math.min(1, Math.abs(diff) * 1.1 + 0.2);
+          console.log({ duration})
+        
+          // Predict where the wave will be at the end of that duration
+          const futureT = currentT + duration * 0.5; // same speed as animate()
+          const targetPhaseY = (Math.sin(futureT) + 1) / 2;
+        
+          hitbox.data.isDragging = true;
+        
+          const startRotX = vx;
+          const startTime = performance.now();
+          const ease = (t) => 0.5 - 0.5 * Math.cos(Math.PI * t);
+        
+          const step = (now) => {
+            const elapsed = (now - startTime) / 1000;
+            const progress = Math.min(elapsed / duration, 1);
+            const eased = ease(progress);
+        
+            // interpolate to the future wave position
+            const interpY = startPhaseY + (targetPhaseY - startPhaseY) * eased;
+            const interpX = startRotX * (1 - eased); // rotate back to neutral
+            applyPhaseToCircle(hitbox, interpY, interpX);
+        
+            if (progress < 1) {
+              requestAnimationFrame(step);
+            } else {
+              // when done, sync perfectly to the natural sine
+              hitbox.data.isDragging = false;
+              hitbox.data.t = futureT;
+            }
+          };
+        
+          requestAnimationFrame(step);
         };
+        
+        
+        
+        
+        
+
+        // hitbox.onMouseUp = (e) => {
+        //   hitbox.data.isUserControlled = false;
+
+        //   const { rowsByY, rowKeys, center } = hitbox.data;
+        //   if (!rowKeys || rowKeys.length < 2) return;
+
+        //   const yTop = rowKeys[0];
+        //   const yBot = rowKeys[rowKeys.length - 1];
+        //   const samplePath = rowsByY[yTop]?.[0];
+        //   if (!samplePath) return;
+
+        //   const yCur = samplePath.position.y;
+        //   const denom = (yBot - yTop) || 1;
+
+        //   const phase = clamp((yCur - yTop) / denom, 0, 1);
+        //   const s = 2 * phase - 1;
+
+        //   const dirIncreasing = (hitbox.data.lastVy ?? 0) >= 0;
+        //   const cAbs = Math.sqrt(Math.max(0, 1 - s * s));
+        //   const c = dirIncreasing ? cAbs : -cAbs;
+
+        //   hitbox.data.t = Math.atan2(s, c);
+        
+        //   const rel = e.point.subtract(center);
+        //   const vx = clamp(rel.x / radius, -1, 1);
+        //   const vy = clamp(rel.y / radius, -1, 1);
+
+        //   const isVertical = vy < 0.05 || vy > 0.95
+        //   const isNotSlanted = (vx >= 0 && vx < 0.1) || (vx <= 0 && vx > -0.1)
+        //   if(isVertical && isNotSlanted) {
+        //     hitbox.data.isUserControlled = true;
+        //   }
+
+        //   const mousePt = paper.view.getEventPoint(event);
+        //   if (hitbox.contains(mousePt)) {
+        //     setCursor("grab"); 
+        //   } else {
+        //     setCursor("default");
+        //   }
+
+        // };
 
         
       });
