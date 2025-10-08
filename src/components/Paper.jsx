@@ -282,53 +282,39 @@ const Paper = ({ logging }) => {
           const rel = e.point.subtract(center);
           const vx = clamp(rel.x / radius, -1, 1);
           const vy = clamp(rel.y / radius, -1, 1);
+
+          
         
           const startPhaseY = hitbox.data.lastPhaseY ?? (vy + 1) / 2;
-          const currentT = hitbox.data.t ?? 0;
-        
-          // How far we are from the continuous wave
-          const naturalPhaseY = (Math.sin(currentT) + 1) / 2;
-        
-          // Distance along wave (0–1)
-          const diff = naturalPhaseY - startPhaseY;
-        
-          // Base duration scaled by distance (short distance = faster)
-          const baseDuration = 3.3; // seconds
-          const duration = baseDuration * Math.min(1, Math.abs(diff) * 1.1 + 0.2);
-          console.log({ duration})
-        
-          // Predict where the wave will be at the end of that duration
-          const futureT = currentT + duration * 0.5; // same speed as animate()
-          const targetPhaseY = (Math.sin(futureT) + 1) / 2;
+          const targetPhaseY = (Math.sin(hitbox.data.t  ?? 0) + 1) / 2; // continue sine motion
+          const startRotX = vx;
         
           hitbox.data.isDragging = true;
         
-          const startRotX = vx;
+          const duration = 1200;
           const startTime = performance.now();
+        
           const ease = (t) => 0.5 - 0.5 * Math.cos(Math.PI * t);
         
           const step = (now) => {
-            const elapsed = (now - startTime) / 1000;
+            const elapsed = now - startTime;
             const progress = Math.min(elapsed / duration, 1);
             const eased = ease(progress);
         
-            // interpolate to the future wave position
             const interpY = startPhaseY + (targetPhaseY - startPhaseY) * eased;
-            const interpX = startRotX * (1 - eased); // rotate back to neutral
+            const interpX = startRotX * (1 - eased); // smoothly return X rotation to neutral
+        
             applyPhaseToCircle(hitbox, interpY, interpX);
         
             if (progress < 1) {
               requestAnimationFrame(step);
             } else {
-              // when done, sync perfectly to the natural sine
               hitbox.data.isDragging = false;
-              hitbox.data.t = futureT;
             }
           };
         
           requestAnimationFrame(step);
         };
-        
         
         
         
