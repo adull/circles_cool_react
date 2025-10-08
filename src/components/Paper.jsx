@@ -115,8 +115,7 @@ const Paper = ({ logging }) => {
       }
     
       // rotate
-      const MAX_ROT_DEG = 360;
-      // const targetDeg = (phase - 0.5) * 2 * MAX_ROT_DEG;
+      const MAX_ROT_DEG = 180;
       const targetDeg = rotX * MAX_ROT_DEG;
       groupRef.children.forEach(child => {
         if (child.name?.startsWith("vertical-segment-row-")) {
@@ -130,16 +129,12 @@ const Paper = ({ logging }) => {
       });
     }
     
-
-
-    
     const drawPattern = () => {
-      console.log(`start with draw pattern`)
       const { view } = paper;
       const { width, height } = view.size
       const isMobile = window.innerWidth < 769
       
-      const rows = 3;
+      const rows = isMobile ? 2 : 3;
       const cols = isMobile ? 3 : 4
       
       const bandHeight = 8;
@@ -193,7 +188,6 @@ const Paper = ({ logging }) => {
             new paper.Path.Rectangle({
               from: [center.x - halfWidth, absoluteY - bandHeight / 2],
               to: [center.x + halfWidth, absoluteY + bandHeight / 2],
-              // fillColor: new paper.Color('red')
               name: `vertical-segment-row-${absoluteY.toFixed(0)}`,
               data: {
                 rowY: absoluteY,
@@ -204,7 +198,6 @@ const Paper = ({ logging }) => {
               fillColor
             });
           }
-      
         }
       }
     }
@@ -217,7 +210,7 @@ const Paper = ({ logging }) => {
 
     const attachCircleDragHandlers = () => {
       const verticals = paper.project.getItems({ name: /^vertical-segment-row-/ });
-      const circles = {}; // { [circleId]: { rows: { [rowY]: Path[] } } }
+      const circles = {};
     
       verticals.forEach(path => {
         const circleId = path.data?.circleId;
@@ -256,13 +249,6 @@ const Paper = ({ logging }) => {
             isDragging: false
           }
         });
-
-    
-        group.children.forEach(child => {
-          if (child.name?.startsWith('vertical-segment-row-')) {
-            // child.data.rotDeg = 0; // current absolute rotation we've applied
-          }
-        });
     
         hitbox.onMouseEnter = () => {
           setCursor("grab"); 
@@ -273,6 +259,7 @@ const Paper = ({ logging }) => {
         };
 
         hitbox.onMouseDrag = (e) => {
+          setCursor("grabbing");
           hitbox.data.isDragging = true;
           const { center, radius } = hitbox.data;
 
@@ -288,60 +275,16 @@ const Paper = ({ logging }) => {
           applyPhaseToCircle(hitbox, phaseY, rotX);
         };
         
-        hitbox.onMouseUp = (e) => {
+        hitbox.onMouseUp = () => {
           const { lastPhaseY, lastRotX } = hitbox.data;
           applyPhaseToCircle(hitbox, lastPhaseY, lastRotX);
           hitbox.data.isDragging = false;
           hitbox.data.syncToLastPhase = true
         };
         
-        
-        
-        
-
-        // hitbox.onMouseUp = (e) => {
-        //   hitbox.data.isUserControlled = false;
-
-        //   const { rowsByY, rowKeys, center } = hitbox.data;
-        //   if (!rowKeys || rowKeys.length < 2) return;
-
-        //   const yTop = rowKeys[0];
-        //   const yBot = rowKeys[rowKeys.length - 1];
-        //   const samplePath = rowsByY[yTop]?.[0];
-        //   if (!samplePath) return;
-
-        //   const yCur = samplePath.position.y;
-        //   const denom = (yBot - yTop) || 1;
-
-        //   const phase = clamp((yCur - yTop) / denom, 0, 1);
-        //   const s = 2 * phase - 1;
-
-        //   const dirIncreasing = (hitbox.data.lastVy ?? 0) >= 0;
-        //   const cAbs = Math.sqrt(Math.max(0, 1 - s * s));
-        //   const c = dirIncreasing ? cAbs : -cAbs;
-
-        //   hitbox.data.t = Math.atan2(s, c);
-        
-        //   const rel = e.point.subtract(center);
-        //   const vx = clamp(rel.x / radius, -1, 1);
-        //   const vy = clamp(rel.y / radius, -1, 1);
-
-        //   const isVertical = vy < 0.05 || vy > 0.95
-        //   const isNotSlanted = (vx >= 0 && vx < 0.1) || (vx <= 0 && vx > -0.1)
-        //   if(isVertical && isNotSlanted) {
-        //     hitbox.data.isUserControlled = true;
-        //   }
-
-        //   const mousePt = paper.view.getEventPoint(event);
-        //   if (hitbox.contains(mousePt)) {
-        //     setCursor("grab"); 
-        //   } else {
-        //     setCursor("default");
-        //   }
-
-        // };
-
-        
+        hitbox.onMouseDown = () => {
+          setCursor("grabbing");
+        }
       });
     };
     
