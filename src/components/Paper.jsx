@@ -26,7 +26,6 @@ const Paper = ({ logging }) => {
             paper.view.viewSize = new paper.Size(width, height)
             paper.view.update()
           }
-          console.log(`ummm is it here/?`)
           setTimeout(() => { drawPattern(); attachCircleDragHandlers(); }, 100)
 
           paper.view.onFrame = (event) => {
@@ -59,27 +58,18 @@ const Paper = ({ logging }) => {
     const initPaper = () => {
       paper.setup("paper")
     }
-    // let deltalimit = 1
     const animate = (event) => {
       paper.project.getItems({ name: /^hit-/ }).forEach(hitbox => {
-        // 1) world time always advances
-    
-        // skip visuals while dragging
         if (hitbox.data.isDragging) return;
         hitbox.data.t = (hitbox.data.t ?? 0) + event.delta * WAVESPEED;
     
-        // 2) if we just released, sync t exactly to the released phase once
         if (hitbox.data.syncToLastPhase && hitbox.data.lastPhaseY != null) {
-          console.log(`go here`)
-          syncTimeToPhase(hitbox, hitbox.data.lastPhaseY);
           hitbox.data.syncToLastPhase = false;
         }
     
-        // 3) target from the running wave
         const targetPhaseY = (Math.sin(hitbox.data.t) + 1) / 2;
         const targetRotX   = Math.cos(hitbox.data.t) * 0.1;
     
-        // 4) blend from what we had (prevents tiny frame jitter / “snap”)
         const k = 10; // smoothing strength; higher = snappier
         const alpha = 1 - Math.exp(-k * event.delta);
         const prevPhaseY = hitbox.data.lastPhaseY ?? targetPhaseY;
@@ -261,14 +251,15 @@ const Paper = ({ logging }) => {
         hitbox.onMouseDrag = (e) => {
           setCursor("grabbing");
           hitbox.data.isDragging = true;
-          const { center, radius } = hitbox.data;
+          const { center, radius, dragOffset } = hitbox.data;
 
           const rel = e.point.subtract(center);
           const vx = clamp(rel.x / radius, -1, 1);
           const vy = clamp(rel.y / radius, -1, 1);
 
-          const phaseY = (vy + 1) / 2;
-          const rotX = vx;
+          const phaseY = clamp((vy + 1) / 2 + (dragOffset?.phaseY || 0), 0, 1);
+          const rotX = clamp(vx + (dragOffset?.rotX || 0), -1, 1);
+
 
           hitbox.data.lastPhaseY = phaseY;
           hitbox.data.lastRotX   = rotX;
@@ -276,14 +267,37 @@ const Paper = ({ logging }) => {
         };
         
         hitbox.onMouseUp = () => {
+          setCursor("grab");
           const { lastPhaseY, lastRotX } = hitbox.data;
-          applyPhaseToCircle(hitbox, lastPhaseY, lastRotX);
+          syncTimeToPhase(hitbox, lastPhaseY);
+        
           hitbox.data.isDragging = false;
-          hitbox.data.syncToLastPhase = true
+        
+          hitbox.data.releaseEase = {
+            t: 0,
+            startPhase: lastPhaseY,
+            startRot: lastRotX,
+          };
         };
         
-        hitbox.onMouseDown = () => {
+        
+        hitbox.onMouseDown = (e) => {
           setCursor("grabbing");
+          hitbox.data.isDragging = true;
+
+          const { lastPhaseY, lastRotX } = hitbox.data;
+
+          const { center, radius } = hitbox.data;
+          const rel = e.point.subtract(center);
+          const startVx = clamp(rel.x / radius, -1, 1);
+          const startVy = clamp(rel.y / radius, -1, 1);
+
+          hitbox.data.dragOffset = {
+            phaseY: lastPhaseY - (startVy + 1) / 2,
+            rotX:   lastRotX - startVx,
+          };
+
+
         }
       });
     };
